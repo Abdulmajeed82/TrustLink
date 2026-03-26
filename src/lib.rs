@@ -145,6 +145,7 @@ fn store_attestation(env: &Env, attestation: &Attestation) {
     Storage::set_attestation(env, attestation);
     Storage::add_subject_attestation(env, &attestation.subject, &attestation.id);
     Storage::add_issuer_attestation(env, &attestation.issuer, &attestation.id);
+    Storage::add_subject_claim_attestation(env, &attestation.subject, &attestation.claim_type, &attestation.id);
 
     // Increment total_issued counter atomically with the attestation write.
     let mut stats = Storage::get_issuer_stats(env, &attestation.issuer);
@@ -756,12 +757,12 @@ impl TrustLinkContract {
     }
 
     pub fn has_valid_claim(env: Env, subject: Address, claim_type: String) -> bool {
-        let attestation_ids = Storage::get_subject_attestations(&env, &subject);
+        let attestation_ids = Storage::get_subject_claim_attestations(&env, &subject, &claim_type);
         let current_time = env.ledger().timestamp();
 
         for attestation_id in attestation_ids.iter() {
             if let Ok(attestation) = Storage::get_attestation(&env, &attestation_id) {
-                if attestation.deleted || attestation.claim_type != claim_type {
+                if attestation.deleted {
                     continue;
                 }
                 match attestation.get_status(current_time) {
@@ -901,6 +902,7 @@ impl TrustLinkContract {
         attestation.deleted = true;
         Storage::set_attestation(&env, &attestation);
         Storage::remove_subject_attestation(&env, &subject, &attestation_id);
+        Storage::remove_subject_claim_attestation(&env, &subject, &attestation.claim_type, &attestation_id);
 
         let timestamp = env.ledger().timestamp();
         Events::deletion_requested(&env, &subject, &attestation_id, timestamp);
